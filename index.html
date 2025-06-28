@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Data Scatter Plots</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: "Segoe UI", Roboto, sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .chart-container {
+            width: 95%;
+            max-width: 800px;
+            margin-bottom: 20px;
+        }
+        svg {
+            width: 100%;
+            height: 350px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #888;
+            shape-rendering: crispEdges;
+        }
+        .axis text {
+            font-size: 10px;
+            fill: #555;
+        }
+        .grid line {
+            stroke: #e0e0e0;
+            stroke-opacity: 0.7;
+            shape-rendering: crispEdges;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            width: auto;
+            height: auto;
+            padding: 8px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+        }
+        .trendline {
+            fill: none;
+            stroke: orange;
+            stroke-width: 2px;
+        }
+        h2 {
+            text-align: center;
+            font-weight: 300;
+            margin-top: 20px;
+            margin-bottom: 5px;
+        }
+        footer {
+            margin-top: 30px;
+            padding: 15px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #777;
+            width: 100%;
+            background-color: #f0f0f0;
+        }
+        footer a {
+            color: steelblue;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="tooltip"></div>
+
+    <div class="chart-container">
+        <h2>Pages vs Rating</h2>
+        <svg id="chart1"></svg>
+    </div>
+    <div class="chart-container">
+        <h2>Blurb Length vs Rating</h2>
+        <svg id="chart2"></svg>
+    </div>
+    <div class="chart-container">
+        <h2>log₁₀(Reviews) vs Rating</h2>
+        <svg id="chart3"></svg>
+    </div>
+
+    <footer>
+        Visualizations by Jules (AI Agent) | Data Source: <a href="https://www.kaggle.com/datasets/jealousleopard/goodreadsbooks" target="_blank">GoodReads Books Dataset on Kaggle</a>
+    </footer>
+
+    <script>
+        const tooltip = d3.select(".tooltip");
+
+        function createScatterPlot(data, svgId, xValueAccessor, yValueAccessor, xLabel, yLabel, isLogScaleX = false) {
+            const svg = d3.select("#" + svgId);
+            const margin = {top: 20, right: 30, bottom: 50, left: 60};
+
+            let width, height, xScale, yScale;
+
+            function initializePlot() {
+                width = parseInt(svg.style("width")) - margin.left - margin.right;
+                height = parseInt(svg.style("height")) - margin.top - margin.bottom;
+
+                svg.selectAll("*").remove(); // Clear previous plot elements for resize
+
+                const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+                const xDomain = d3.extent(data, xValueAccessor);
+                const yDomain = [0, d3.max(data, yValueAccessor)]; // Assuming y (rating) starts at 0
+
+                xScale = isLogScaleX ? d3.scaleLog().base(10) : d3.scaleLinear();
+                xScale.domain(xDomain).range([0, width]).nice();
+
+                yScale = d3.scaleLinear().domain(yDomain).range([height, 0]).nice();
+
+                // X Axis
+                g.append("g")
+                    .attr("class", "axis x-axis")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(xScale).ticks(width / 80).tickSizeOuter(0))
+                    .append("text")
+                    .attr("x", width / 2)
+                    .attr("y", margin.bottom - 10)
+                    .attr("fill", "#000")
+                    .style("text-anchor", "middle")
+                    .text(xLabel);
+
+                // Y Axis
+                g.append("g")
+                    .attr("class", "axis y-axis")
+                    .call(d3.axisLeft(yScale).ticks(height / 40).tickSizeOuter(0))
+                    .append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", -margin.left + 20)
+                    .attr("x", -height / 2)
+                    .attr("fill", "#000")
+                    .style("text-anchor", "middle")
+                    .text(yLabel);
+
+                // Gridlines
+                g.append("g")
+                    .attr("class", "grid")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(xScale).ticks(width / 80).tickSize(-height).tickFormat(""));
+
+                g.append("g")
+                    .attr("class", "grid")
+                    .call(d3.axisLeft(yScale).ticks(height / 40).tickSize(-width).tickFormat(""));
+
+                // Points
+                g.selectAll(".dot")
+                    .data(data)
+                    .enter().append("circle")
+                    .attr("class", "dot")
+                    .attr("cx", d => xScale(xValueAccessor(d)))
+                    .attr("cy", d => yScale(yValueAccessor(d)))
+                    .attr("r", 4) // Smaller radius for 5000 points
+                    .style("fill", "steelblue")
+                    .style("opacity", 0.2)
+                    .on("mouseover", (event, d) => {
+                        tooltip.transition().duration(200).style("opacity", .9);
+                        tooltip.html(`${xLabel}: ${xValueAccessor(d)}<br/>${yLabel}: ${yValueAccessor(d)}`)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", () => {
+                        tooltip.transition().duration(500).style("opacity", 0);
+                    });
+
+                // LOESS trend line (simplified - using moving average as true LOESS is complex)
+                // This is a very basic approximation. Proper LOESS is computationally intensive for frontend.
+                // For a real LOESS, consider a library or server-side computation.
+                const lineData = data
+                    .map(d => ({ x: xValueAccessor(d), y: yValueAccessor(d) }))
+                    .filter(d => d.x != null && d.y != null && isFinite(d.x) && isFinite(d.y)) // Filter out NaNs/Infinities
+                    .sort((a, b) => a.x - b.x);
+
+                if (lineData.length > 1) { // Ensure there's data to plot
+                    // Simplified moving average for trend indication
+                    const windowSize = Math.max(10, Math.floor(lineData.length / 20)); // Adjust window size
+                    const smoothedData = [];
+                    for (let i = 0; i < lineData.length; i++) {
+                        const start = Math.max(0, i - Math.floor(windowSize / 2));
+                        const end = Math.min(lineData.length, i + Math.ceil(windowSize / 2));
+                        const windowSlice = lineData.slice(start, end);
+                        const avgY = d3.mean(windowSlice, d => d.y);
+                        if (avgY !== undefined) {
+                             smoothedData.push({x: lineData[i].x, y: avgY});
+                        }
+                    }
+
+                    if (smoothedData.length > 1) {
+                        const line = d3.line()
+                            .x(d => xScale(d.x))
+                            .y(d => yScale(d.y))
+                            .curve(d3.curveBasis); // Smoother curve
+
+                        g.append("path")
+                            .datum(smoothedData)
+                            .attr("class", "trendline")
+                            .attr("d", line);
+                    }
+                }
+            }
+
+            initializePlot();
+            window.addEventListener('resize', initializePlot);
+        }
+
+        fetch('scatter_data.json')
+            .then(response => response.json())
+            .then(data => {
+                // Convert 'reviews' to number for log scale if it's not already
+                data.forEach(d => {
+                    d.pages = +d.pages;
+                    d.blurb = +d.blurb;
+                    d.reviews = +d.reviews;
+                    d.rating = +d.rating;
+                });
+
+                createScatterPlot(data, "chart1", d => d.pages, d => d.rating, "Pages", "Rating");
+                createScatterPlot(data, "chart2", d => d.blurb, d => d.rating, "Blurb Length", "Rating");
+                createScatterPlot(data, "chart3", d => d.reviews > 0 ? d.reviews : 1, d => d.rating, "Reviews (log₁₀)", "Rating", true);
+            })
+            .catch(error => console.error('Error loading or parsing data:', error));
+    </script>
+</body>
+</html>
