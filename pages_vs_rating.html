@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pages vs Rating</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: "Segoe UI", Roboto, sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            margin: 0;
+            padding: 20px; /* Add some padding */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .chart-container {
+            width: 95%;
+            max-width: 800px; /* Max width for larger screens */
+            margin-bottom: 20px;
+        }
+        svg {
+            width: 100%;
+            height: 350px; /* Fixed height, width is responsive */
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #888;
+            shape-rendering: crispEdges;
+        }
+        .axis text {
+            font-size: 10px;
+            fill: #555;
+        }
+        .grid line {
+            stroke: #e0e0e0;
+            stroke-opacity: 0.7;
+            shape-rendering: crispEdges;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            width: auto;
+            height: auto;
+            padding: 8px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+        }
+        .trendline {
+            fill: none;
+            stroke: orange;
+            stroke-width: 2px;
+        }
+        h2 {
+            text-align: center;
+            font-weight: 300;
+            margin-top: 0; /* Adjusted margin */
+            margin-bottom: 15px; /* Adjusted margin */
+        }
+        footer {
+            margin-top: 30px;
+            padding: 15px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #777;
+            width: 100%;
+            background-color: #f0f0f0;
+        }
+        footer a {
+            color: steelblue;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="tooltip"></div>
+
+    <div class="chart-container">
+        <h2>Pages vs Rating</h2>
+        <svg id="pages_chart"></svg>
+    </div>
+
+    <footer>
+        Visualizations by Jules (AI Agent) | Data Source: <a href="https://www.kaggle.com/datasets/jealousleopard/goodreadsbooks" target="_blank">GoodReads Books Dataset on Kaggle</a>
+    </footer>
+
+    <script>
+        const tooltip = d3.select(".tooltip");
+
+        function createScatterPlot(data, svgId, xValueAccessor, yValueAccessor, xLabel, yLabel, isLogScaleX = false) {
+            const svg = d3.select("#" + svgId);
+            const margin = {top: 20, right: 30, bottom: 50, left: 60};
+
+            let width, height, xScale, yScale;
+
+            function initializePlot() {
+                const containerWidth = parseInt(d3.select(".chart-container").style("width"));
+                width = containerWidth - margin.left - margin.right;
+                // Height is fixed based on SVG style, but we use the container's height attribute for consistency if needed
+                height = parseInt(svg.style("height")) - margin.top - margin.bottom;
+
+
+                svg.selectAll("*").remove(); // Clear previous plot elements for resize
+
+                const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+                const xDomain = d3.extent(data, xValueAccessor);
+                // Ensure yDomain for rating is sensible, e.g., 0-5 or actual min/max if different
+                const yMin = d3.min(data, yValueAccessor);
+                const yMax = d3.max(data, yValueAccessor);
+                const yDomain = [Math.max(0, yMin - 0.5), Math.min(5, yMax + 0.5)]; // Example: rating scale, allow some padding
+
+                xScale = isLogScaleX ? d3.scaleLog().base(10) : d3.scaleLinear();
+                xScale.domain(xDomain).range([0, width]).nice();
+
+                yScale = d3.scaleLinear().domain(yDomain).range([height, 0]).nice();
+
+                // X Axis
+                g.append("g")
+                    .attr("class", "axis x-axis")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(xScale).ticks(Math.max(2, width / 80)).tickSizeOuter(0))
+                    .append("text")
+                    .attr("x", width / 2)
+                    .attr("y", margin.bottom - 10)
+                    .attr("fill", "#000")
+                    .style("text-anchor", "middle")
+                    .text(xLabel);
+
+                // Y Axis
+                g.append("g")
+                    .attr("class", "axis y-axis")
+                    .call(d3.axisLeft(yScale).ticks(Math.max(2, height / 40)).tickSizeOuter(0))
+                    .append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", -margin.left + 20)
+                    .attr("x", -height / 2)
+                    .attr("fill", "#000")
+                    .style("text-anchor", "middle")
+                    .text(yLabel);
+
+                // Gridlines
+                g.append("g")
+                    .attr("class", "grid")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(xScale).ticks(Math.max(2, width / 80)).tickSize(-height).tickFormat(""));
+
+                g.append("g")
+                    .attr("class", "grid")
+                    .call(d3.axisLeft(yScale).ticks(Math.max(2, height / 40)).tickSize(-width).tickFormat(""));
+
+                // Points
+                g.selectAll(".dot")
+                    .data(data)
+                    .enter().append("circle")
+                    .attr("class", "dot")
+                    .attr("cx", d => xScale(xValueAccessor(d)))
+                    .attr("cy", d => yScale(yValueAccessor(d)))
+                    .attr("r", 4)
+                    .style("fill", "steelblue")
+                    .style("opacity", 0.2)
+                    .on("mouseover", (event, d) => {
+                        tooltip.transition().duration(200).style("opacity", .9);
+                        tooltip.html(`${xLabel}: ${xValueAccessor(d)}<br/>${yLabel}: ${yValueAccessor(d)}`)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", () => {
+                        tooltip.transition().duration(500).style("opacity", 0);
+                    });
+
+                const lineData = data
+                    .map(d => ({ x: xValueAccessor(d), y: yValueAccessor(d) }))
+                    .filter(d => d.x != null && d.y != null && isFinite(d.x) && isFinite(d.y) && !isNaN(d.x) && !isNaN(d.y))
+                    .sort((a, b) => a.x - b.x);
+
+                if (lineData.length > 1) {
+                    const windowSize = Math.max(10, Math.floor(lineData.length / 20));
+                    const smoothedData = [];
+                    for (let i = 0; i < lineData.length; i++) {
+                        const start = Math.max(0, i - Math.floor(windowSize / 2));
+                        const end = Math.min(lineData.length, i + Math.ceil(windowSize / 2));
+                        const windowSlice = lineData.slice(start, end);
+                        const avgY = d3.mean(windowSlice, d_item => d_item.y); // Changed variable name to avoid conflict
+                        if (avgY !== undefined && !isNaN(avgY)) { // Ensure avgY is a valid number
+                             smoothedData.push({x: lineData[i].x, y: avgY});
+                        }
+                    }
+
+                    if (smoothedData.length > 1) {
+                        const line = d3.line()
+                            .x(d_item => xScale(d_item.x)) // Changed variable name
+                            .y(d_item => yScale(d_item.y)) // Changed variable name
+                            .defined(d_item => !isNaN(xScale(d_item.x)) && !isNaN(yScale(d_item.y))) // Add defined check
+                            .curve(d3.curveBasis);
+
+                        g.append("path")
+                            .datum(smoothedData.filter(d_item => !isNaN(xScale(d_item.x)) && !isNaN(yScale(d_item.y)))) // Filter data for path
+                            .attr("class", "trendline")
+                            .attr("d", line);
+                    }
+                }
+            }
+
+            initializePlot(); // Initial plot draw
+            // Debounce resize event
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(initializePlot, 100); // Adjust delay as needed
+            });
+        }
+
+        fetch('scatter_data.json')
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(d => {
+                    d.pages = +d.pages;
+                    d.blurb = +d.blurb; // Keep for potential future use, though not plotted here
+                    d.reviews = +d.reviews; // Keep for potential future use
+                    d.rating = +d.rating;
+                });
+                createScatterPlot(data, "pages_chart", d => d.pages, d => d.rating, "Pages", "Rating");
+            })
+            .catch(error => console.error('Error loading or parsing data:', error));
+    </script>
+</body>
+</html>
